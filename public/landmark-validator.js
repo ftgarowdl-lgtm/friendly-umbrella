@@ -7,11 +7,11 @@ const LANDMARK_VALIDATION = {
   maxEyeToFaceWidthRatio: 0.62,
   maxRollDeg: 10,
   maxNoseAxisRatio: 0.18,
-  minImageSide: 480,
-  minSharpness: 12,
-  minExposure: 35,
-  maxExposure: 220,
-  minScore: 0.78
+  minImageSide: 320,
+  minSharpness: 6,
+  minExposure: 30,
+  maxExposure: 235,
+  minScore: 0.72
 };
 
 function distance2D(a, b) {
@@ -37,7 +37,7 @@ function imageQuality(image) {
     const gray = new Float32Array(cw * ch);
     for (let y = 0; y < ch; y++) {
       for (let x = 0; x < cw; x++) {
-        const i = y * cw + x, p = i * 4;
+        const i = (y * cw + x), p = i * 4;
         const g = 0.2126 * data[p] + 0.7152 * data[p + 1] + 0.0722 * data[p + 2];
         gray[i] = g; mean += g;
       }
@@ -56,13 +56,13 @@ function imageQuality(image) {
     const exposureScore = lowLight || overexposed ? 0 : clamp01(1 - Math.abs(mean - 128) / 128);
     const sharpScore = clamp01(sharp / 180);
     const resolutionScore = Math.min(1, Math.min(w, h) / 720);
-    const score = clamp01(0.45 * exposureScore + 0.4 * sharpScore + 0.15 * resolutionScore);
+    const score = clamp01(0.50 * exposureScore + 0.35 * sharpScore + 0.15 * resolutionScore);
     const errors = [], warnings = [];
-    if (Math.min(w, h) < LANDMARK_VALIDATION.minImageSide) errors.push('Imagem com resolução baixa para uma medição detalhada.');
+    if (Math.min(w, h) < LANDMARK_VALIDATION.minImageSide) warnings.push('Imagem com resolução abaixo do ideal; medidas podem ter menor precisão.');
     if (lowLight) errors.push('Iluminação muito baixa.');
     if (overexposed) errors.push('Imagem superexposta.');
-    if (sharp < LANDMARK_VALIDATION.minSharpness) errors.push('Imagem pouco nítida.');
-    if (score < 0.55 && !errors.length) warnings.push('Qualidade visual baixa.');
+    if (sharp < LANDMARK_VALIDATION.minSharpness) warnings.push('Imagem com nitidez abaixo do ideal.');
+    if (score < 0.45 && !errors.length) warnings.push('Qualidade visual baixa.');
     return { score: Number(score.toFixed(3)), mean: Number(mean.toFixed(1)), sharpness: Number(sharp.toFixed(2)), errors, warnings };
   } catch (e) {
     return { score: 0, errors: ['Falha ao avaliar a qualidade visual da imagem.'], warnings: [e.message] };
@@ -117,7 +117,7 @@ function validateMediaPipeLandmarks(landmarks, width, height, confidence = 1, so
   const geometryScore = clamp01(0.45 + 0.55 * Math.min(1, eyeFaceRatio / 0.30));
   const pointScore = valid / 468;
   const quality = sourceImage ? imageQuality(sourceImage) : { score: 1, errors: [], warnings: [] };
-  const score = clamp01(0.40 * pointScore + 0.30 * poseScore + 0.15 * geometryScore + 0.15 * quality.score);
+  const score = clamp01(0.42 * pointScore + 0.31 * poseScore + 0.17 * geometryScore + 0.10 * quality.score);
 
   return {
     valid: errors.length === 0 && quality.errors.length === 0 && score >= LANDMARK_VALIDATION.minScore,
