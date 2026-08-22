@@ -22,9 +22,9 @@ function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
 function imageQuality(image) {
   try {
-    const w = image.naturalWidth || image.videoWidth || image.width || 0;
-    const h = image.naturalHeight || image.videoHeight || image.height || 0;
-    if (!w || !h) return { score: 0, errors: ['Não foi possível ler a resolução da imagem.'] };
+    const w = image?.naturalWidth || image?.videoWidth || image?.width || 0;
+    const h = image?.naturalHeight || image?.videoHeight || image?.height || 0;
+    if (!w || !h) return { score: 0, errors: ['Não foi possível ler a resolução da imagem.'], warnings: [] };
     const scale = Math.min(1, 256 / Math.max(w, h));
     const cw = Math.max(64, Math.round(w * scale));
     const ch = Math.max(64, Math.round(h * scale));
@@ -33,16 +33,16 @@ function imageQuality(image) {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     ctx.drawImage(image, 0, 0, cw, ch);
     const data = ctx.getImageData(0, 0, cw, ch).data;
-    let mean = 0, mean2 = 0, sharp = 0, n = 0;
+    let mean = 0, sharp = 0;
     const gray = new Float32Array(cw * ch);
     for (let y = 0; y < ch; y++) {
       for (let x = 0; x < cw; x++) {
-        const i = (y * cw + x), p = i * 4;
+        const i = y * cw + x, p = i * 4;
         const g = 0.2126 * data[p] + 0.7152 * data[p + 1] + 0.0722 * data[p + 2];
-        gray[i] = g; mean += g; mean2 += g * g;
+        gray[i] = g; mean += g;
       }
     }
-    n = gray.length; mean /= n; mean2 /= n;
+    mean /= gray.length;
     for (let y = 1; y < ch - 1; y++) {
       for (let x = 1; x < cw - 1; x++) {
         const i = y * cw + x;
@@ -57,8 +57,7 @@ function imageQuality(image) {
     const sharpScore = clamp01(sharp / 180);
     const resolutionScore = Math.min(1, Math.min(w, h) / 720);
     const score = clamp01(0.45 * exposureScore + 0.4 * sharpScore + 0.15 * resolutionScore);
-    const errors = [];
-    const warnings = [];
+    const errors = [], warnings = [];
     if (Math.min(w, h) < LANDMARK_VALIDATION.minImageSide) errors.push('Imagem com resolução baixa para uma medição detalhada.');
     if (lowLight) errors.push('Iluminação muito baixa.');
     if (overexposed) errors.push('Imagem superexposta.');
@@ -70,9 +69,8 @@ function imageQuality(image) {
   }
 }
 
-function validateMediaPipeLandmarks(landmarks, width, height, confidence = 1, image = null) {
-  const errors = [];
-  const warnings = [];
+function validateMediaPipeLandmarks(landmarks, width, height, confidence = 1, sourceImage = null) {
+  const errors = [], warnings = [];
   if (!Array.isArray(landmarks) || landmarks.length < 468) {
     return { valid: false, score: 0, errors: ['O detector não retornou os 468 landmarks esperados.'], warnings };
   }
@@ -109,8 +107,7 @@ function validateMediaPipeLandmarks(landmarks, width, height, confidence = 1, im
   const noseAxisRatio = Math.abs(nose.x - eyeMidX) / Math.max(faceWidth, 1e-6);
   if (noseAxisRatio > LANDMARK_VALIDATION.maxNoseAxisRatio) warnings.push('Eixo nasal desviado; verifique a pose antes de medir.');
 
-  const leftHalf = distance2D(nose, leftEye);
-  const rightHalf = distance2D(nose, rightEye);
+  const leftHalf = distance2D(nose, leftEye), rightHalf = distance2D(nose, rightEye);
   const yawProxy = Math.abs(leftHalf - rightHalf) / Math.max(leftHalf + rightHalf, 1e-6);
   if (yawProxy > 0.16) errors.push('Cabeça parece estar girada; use uma foto mais frontal.');
   else if (yawProxy > 0.10) warnings.push('Pequena rotação facial detectada.');
@@ -119,26 +116,16 @@ function validateMediaPipeLandmarks(landmarks, width, height, confidence = 1, im
   const poseScore = clamp01(1 - roll / 20) * clamp01(1 - yawProxy / 0.25);
   const geometryScore = clamp01(0.45 + 0.55 * Math.min(1, eyeFaceRatio / 0.30));
   const pointScore = valid / 468;
-  const image = imageQuality(image || {});
-  const score = clamp01(0.40 * pointScore + 0.30 * poseScore + 0.15 * geometryScore + 0.15 * image.score);
+  const quality = sourceImage ? imageQuality(sourceImage) : { score: 1, errors: [], warnings: [] };
+  const score = clamp01(0.40 * pointScore + 0.30 * poseScore + 0.15 * geometryScore + 0.15 * quality.score);
 
   return {
-    valid: errors.length === 0 && score >= LANDMARK_VALIDATION.minScore,
+    valid: errors.length === 0 && quality.errors.length === 0 && score >= LANDMARK_VALIDATION.minScore,
     score: Number(score.toFixed(3)),
-    errors: [...new Set([...errors, ...(image.errors || [])])],
-    warnings: [...new Set([...warnings, ...(image.warnings || [])])],
-    pose: {
-      rollDeg: Number(roll.toFixed(2)),
-      yawProxy: Number(yawProxy.toFixed(3)),
-      eyeLineDelta: Number(eyeLine.toFixed(4))
-    },
-    face: {
-      widthRatio: Number(faceWidth.toFixed(4)),
-      height: Number(faceHeight.toFixed(4)),
-      eyeDistance: Number(eyeDistance.toFixed(4)),
-      eyeFaceRatio: Number(eyeFaceRatio.toFixed(4)),
-      noseAxisRatio: Number(noseAxisRatio.toFixed(4))
-    },
-    image
+    errors: [...new Set([...errors, ...(quality.errors || [])])],
+    warnings: [...new Set([...warnings, ...(quality.warnings || [])])],
+    pose: { rollDeg: Number(roll.toFixed(2)), yawProxy: Number(yawProxy.toFixed(3)), eyeLineDelta: Number(eyeLine.toFixed(4)) },
+    face: { widthRatio: Number(faceWidth.toFixed(4)), height: Number(faceHeight.toFixed(4)), eyeDistance: Number(eyeDistance.toFixed(4)), eyeFaceRatio: Number(eyeFaceRatio.toFixed(4)), noseAxisRatio: Number(noseAxisRatio.toFixed(4)) },
+    image: quality
   };
 }
