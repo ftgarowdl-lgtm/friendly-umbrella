@@ -1,0 +1,5 @@
+MAIN=server.js
+MEMORY=512
+VERSION=18
+DISPLAY_NAME=Facial Antropometria IA
+AUTORESTART=true
