@@ -1,12 +1,8 @@
-/* Verità Facial — carrega o bundle ESM atual do MediaPipe e depois os scripts clássicos. */
+/* Verità Facial — carrega o bundle ESM atual do MediaPipe e normaliza o carregamento do WASM. */
 
 const VISION_BUNDLE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
-const CLASSIC_SCRIPTS = [
-  'landmark-validator.js',
-  'metrics-engine.js',
-  'face-score.js',
-  'script.js'
-];
+const WASM_BUNDLE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm';
+const CLASSIC_SCRIPTS = ['landmark-validator.js','metrics-engine.js','face-score.js','script.js'];
 
 function loadClassicScript(src) {
   return new Promise((resolve, reject) => {
@@ -21,19 +17,18 @@ function loadClassicScript(src) {
 async function boot() {
   try {
     const vision = await import(VISION_BUNDLE);
-    window.FilesetResolver = vision.FilesetResolver;
+    const NativeFilesetResolver = vision.FilesetResolver;
+    window.FilesetResolver = {
+      forVisionTasks: () => NativeFilesetResolver.forVisionTasks(WASM_BUNDLE)
+    };
     window.FaceLandmarker = vision.FaceLandmarker;
     window.DrawingUtils = vision.DrawingUtils;
 
-    for (const src of CLASSIC_SCRIPTS) {
-      await loadClassicScript(src);
-    }
+    for (const src of CLASSIC_SCRIPTS) await loadClassicScript(src);
   } catch (error) {
     console.error('[MediaPipe] Falha no carregamento:', error);
     const root = document.getElementById('app-root');
-    if (root) {
-      root.innerHTML = `<main style="font-family:system-ui;padding:32px;color:#122033"><h1>Falha ao carregar o MediaPipe</h1><p>${String(error.message || error)}</p><p>Recarregue a página. Se o erro persistir, verifique sua conexão com a CDN.</p></main>`;
-    }
+    if (root) root.innerHTML = `<main style="font-family:system-ui;padding:32px;color:#122033"><h1>Falha ao carregar o MediaPipe</h1><p>${String(error.message || error)}</p><p>Recarregue a página. Se o erro persistir, verifique sua conexão com a CDN.</p></main>`;
   }
 }
 
