@@ -2,7 +2,7 @@
 
 const VISION_BUNDLE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs';
 const WASM_BUNDLE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm';
-const CLASSIC_SCRIPTS = ['landmark-validator.js','metrics-engine.js','face-score.js','script.js'];
+const CLASSIC_SCRIPTS = ['landmark-validator.js','metrics-engine.js','face-score.js','script.js','canvas-fix.js'];
 
 function loadClassicScript(src) {
   return new Promise((resolve, reject) => {
