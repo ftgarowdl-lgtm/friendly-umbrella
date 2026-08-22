@@ -16,6 +16,15 @@ function calculateFaceScoreFromMetrics(m){
   const final01=clamp01(total?weighted/total:0),score=Number((final01*10).toFixed(2));
   return{score,label:score>=8?'Alta consistência geométrica':score>=6?'Consistência geométrica moderada':'Baixa consistência geométrica',components:Object.fromEntries(Object.entries(components).map(([k,v])=>[k,Number((v.score*10).toFixed(2))]))};
 }
+function calculateFaceScore(landmarks,metrics={}){
+  const base=calculateFaceScoreFromMetrics(metrics||{});
+  let integrity=1;
+  if(Array.isArray(landmarks)&&landmarks.length>=468){let valid=0,edge=0;for(const p of landmarks.slice(0,468)){if(p&&Number.isFinite(p.x)&&Number.isFinite(p.y)&&Number.isFinite(p.z??0))valid++;if(!p||p.x<0||p.x>1||p.y<0||p.y>1)edge++}integrity=clamp01(.8*(valid/468)+.2*(1-edge/468));}
+  const score=Number((clamp01((base.score/10)*.9+integrity*.1)*10).toFixed(2));
+  return{...base,score,integrity:Number((integrity*10).toFixed(2))};
+}
+window.calculateFaceScore=calculateFaceScore;
+window.calculateFaceScoreFromMetrics=calculateFaceScoreFromMetrics;
 function ensureScoreCard(){
   let card=document.getElementById('vfFinalScore');if(card)return card;
   const anchor=document.getElementById('metrics');if(!anchor)return null;
@@ -24,4 +33,3 @@ function ensureScoreCard(){
   anchor.parentElement.insertBefore(card,anchor);return card;
 }
 function renderMathematicalScore(metrics){const card=ensureScoreCard();if(!card)return;const s=calculateFaceScoreFromMetrics(metrics);document.getElementById('vfScoreValue').innerHTML=`${s.score}<small>/10</small>`;document.getElementById('vfScoreRingValue').textContent=s.score;document.getElementById('vfScoreLabel').textContent=s.label;const labels={vertical:'Terços faciais',eyes:'Olhos',nose:'Nariz',mouth:'Boca',jaw:'Mandíbula',symmetry:'Simetria'};document.getElementById('vfScoreComponents').innerHTML=Object.entries(s.components).map(([k,v])=>`<div><span>${labels[k]||k}</span><strong>${v}/10</strong></div>`).join('')}
-(function installScoreHook(){const originalFetch=window.fetch.bind(window);window.fetch=function(input,init){try{if(init&&init.body instanceof FormData&&String(input).includes('/api/analyze')){const raw=init.body.get('metrics');if(raw){const metrics=JSON.parse(raw);setTimeout(()=>renderMathematicalScore(metrics),0)}}}catch(e){console.warn('[FaceScore]',e)}return originalFetch(input,init)}})();
